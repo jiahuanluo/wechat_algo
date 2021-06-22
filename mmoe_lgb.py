@@ -150,8 +150,8 @@ def data_preparation():
     output_info = [(dict_outputs[key], key) for key in sorted(dict_outputs.keys())]
 
     # Split the other dataset into 1:1 validation to test according to the paper
-    trn_x = trn_x[cols]
-    val_x = val_x[cols]
+    trn_x = trn_x[cols].fillna(0)
+    val_x = val_x[cols].fillna(0)
     validation_indices = val_x.sample(frac=0.5, replace=False, random_state=SEED).index
     test_indices = list(set(val_x.index) - set(validation_indices))
     validation_data = val_x.iloc[validation_indices]
@@ -200,10 +200,13 @@ def main():
 
     # Compile model
     model = Model(inputs=[input_layer], outputs=output_layers)
-    adam_optimizer = Adam(lr=0.0001)
+    adam_optimizer = Adam(lr=0.00001)
     model.compile(
-        loss={'read_comment': 'binary_crossentropy', 'like': 'binary_crossentropy',
-              'click_avatar': 'binary_crossentropy', 'forward': 'binary_crossentropy'},
+        loss={'read_comment': 'binary_crossentropy',
+              'like': 'binary_crossentropy',
+              'click_avatar': 'binary_crossentropy',
+              'forward': 'binary_crossentropy'
+              },
         optimizer=adam_optimizer,
         metrics=['accuracy']
     )
