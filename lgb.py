@@ -96,10 +96,14 @@ df = pd.concat([train, test], axis=0, ignore_index=True)
 print(df.head(3))
 ## 读取视频信息表
 feed_info = pd.read_csv('data/wechat_algo_data1/feed_info.csv')
+
 ## 此份baseline只保留这三列
-feed_info = feed_info[[
-    'feedid', 'authorid', 'videoplayseconds'
-]]
+feed_info = feed_info[['feedid', 'authorid', 'videoplayseconds','bgm_song_id', 'bgm_singer_id']]
+feed_info[["bgm_song_id", "bgm_singer_id"]] += 1  # 0 用于填未知
+feed_info[["bgm_song_id", "bgm_singer_id", "videoplayseconds"]] = \
+    feed_info[["bgm_song_id", "bgm_singer_id", "videoplayseconds"]].fillna(0)
+feed_info['bgm_song_id'] = feed_info['bgm_song_id'].astype('int64')
+feed_info['bgm_singer_id'] = feed_info['bgm_singer_id'].astype('int64')
 df = df.merge(feed_info, on='feedid', how='left')
 ## 视频时长是秒，转换成毫秒，才能与play、stay做运算
 df['videoplayseconds'] *= 1000
@@ -137,16 +141,21 @@ for stat_cols in tqdm([['userid'],['feedid'],['authorid'],['userid', 'authorid']
     del stat_df
     gc.collect()
 ## 全局信息统计，包括曝光、偏好等，略有穿越，但问题不大，可以上分，只要注意不要对userid-feedid做组合统计就行
-for f in tqdm(['userid', 'feedid', 'authorid']):
+for f in tqdm(['userid', 'feedid', 'authorid', 'bgm_song_id', 'bgm_singer_id']):
     df[f + '_count'] = df[f].map(df[f].value_counts())
 for f1, f2 in tqdm([
     ['userid', 'feedid'],
-    ['userid', 'authorid']
+    ['userid', 'authorid'],
+    ['userid', 'bgm_song_id'],
+    ['userid', 'bgm_singer_id'],
 ]):
     df['{}_in_{}_nunique'.format(f1, f2)] = df.groupby(f2)[f1].transform('nunique')
     df['{}_in_{}_nunique'.format(f2, f1)] = df.groupby(f1)[f2].transform('nunique')
 for f1, f2 in tqdm([
-    ['userid', 'authorid']
+    ['userid', 'authorid'],
+    ['userid', 'bgm_song_id'],
+    ['userid', 'bgm_singer_id'],
+
 ]):
     df['{}_{}_count'.format(f1, f2)] = df.groupby([f1, f2])['date_'].transform('count')
     df['{}_in_{}_count_prop'.format(f1, f2)] = df['{}_{}_count'.format(f1, f2)] / (df[f2 + '_count'] + 1)

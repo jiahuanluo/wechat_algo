@@ -94,6 +94,7 @@ def data_preparation():
     test = df[df['read_comment'].isna()].reset_index(drop=True)
     trn_x = train[train['date_'] < 14].reset_index(drop=True)
     val_x = train[train['date_'] == 14].reset_index(drop=True)
+    trn_x = trn_x.dropna()
     # Load the dataset in Pandas
     # First group of tasks according to the paper
     label_columns = y_list[:4]
@@ -150,8 +151,8 @@ def data_preparation():
     output_info = [(dict_outputs[key], key) for key in sorted(dict_outputs.keys())]
 
     # Split the other dataset into 1:1 validation to test according to the paper
-    trn_x = trn_x[cols].fillna(0)
-    val_x = val_x[cols].fillna(0)
+    trn_x = trn_x[cols]
+    val_x = val_x[cols]
     validation_indices = val_x.sample(frac=0.5, replace=False, random_state=SEED).index
     test_indices = list(set(val_x.index) - set(validation_indices))
     validation_data = val_x.iloc[validation_indices]
@@ -200,7 +201,7 @@ def main():
 
     # Compile model
     model = Model(inputs=[input_layer], outputs=output_layers)
-    adam_optimizer = Adam(lr=0.00001)
+    adam_optimizer = Adam()
     model.compile(
         loss={'read_comment': 'binary_crossentropy',
               'like': 'binary_crossentropy',
@@ -226,9 +227,10 @@ def main():
                 test_data=(test_data, test_label)
             )
         ],
+        batch_size=256,
         epochs=100
     )
-
+    model.save("my_model.h5")
 
 if __name__ == '__main__':
     main()
