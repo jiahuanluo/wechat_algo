@@ -32,9 +32,9 @@ def uAUC(labels, preds, user_id_list):
     for user_id in user_flag:
         if user_flag[user_id]:
             auc = roc_auc_score(np.asarray(user_truth[user_id]), np.asarray(user_pred[user_id]))
-            total_auc += auc 
+            total_auc += auc
             size += 1.0
-    user_auc = float(total_auc)/size
+    user_auc = float(total_auc) / size
     return user_auc
 
 
@@ -50,19 +50,19 @@ def compute_weighted_score(score_dict, weight_dict):
     weight_sum = 0.0
     for action in score_dict:
         weight = float(weight_dict[action])
-        score += weight*score_dict[action]
+        score += weight * score_dict[action]
         weight_sum += weight
     score /= float(weight_sum)
     score = round(score, 6)
     return score
 
 
-def evaluate_deepctr(val_labels,val_pred_ans,userid_list,target):
+def evaluate_deepctr(val_labels, val_pred_ans, userid_list, target, logging):
     eval_dict = {}
     for i, action in enumerate(target):
         eval_dict[action] = uAUC(val_labels[i], val_pred_ans[i], userid_list)
-    print(eval_dict)
+    logging.info(eval_dict)
     weight_dict = {"read_comment": 4, "like": 3, "click_avatar": 2, "favorite": 1, "forward": 1,
                    "comment": 1, "follow": 1}
     weight_auc = compute_weighted_score(eval_dict, weight_dict)
-    print("Weighted uAUC: ", weight_auc)
+    logging.info("Weighted uAUC: ", weight_auc)
