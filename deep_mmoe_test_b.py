@@ -44,8 +44,7 @@ if __name__ == "__main__":
     embedding_dim = args.embedding_dim
     df = pd.read_csv("data/lgb.csv")
     data = df[~df['read_comment'].isna()].reset_index(drop=True)
-    # test = df[df['read_comment'].isna()].reset_index(drop=True)
-    test = df.reset_index(drop=True)
+    test = df[df['read_comment'].isna()].reset_index(drop=True)
     data = data.sample(frac=args.fraction, replace=False)
 
     play_cols = ['is_finish', 'play_times', 'play', 'stay']

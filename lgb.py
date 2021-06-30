@@ -84,11 +84,14 @@ y_list = ['read_comment', 'like', 'click_avatar', 'forward', 'favorite', 'commen
 max_day = 15
 ## 读取训练集
 train = pd.read_csv('data/wechat_algo_data1/user_action.csv')
+
 print(train.shape)
 for y in y_list:
     print(y, train[y].mean())
 ## 读取测试集
-test = pd.read_csv('data/wechat_algo_data1/test_a.csv')
+test_a = pd.read_csv('data/wechat_algo_data1/test_a.csv')
+test_b = pd.read_csv('data/wechat_algo_data1/test_b.csv')
+test = pd.concat([test_a, test_b])
 test['date_'] = max_day
 print(test.shape)
 ## 合并处理
@@ -163,9 +166,10 @@ for f1, f2 in tqdm([
 df['videoplayseconds_in_userid_mean'] = df.groupby('userid')['videoplayseconds'].transform('mean')
 df['videoplayseconds_in_authorid_mean'] = df.groupby('authorid')['videoplayseconds'].transform('mean')
 df['feedid_in_authorid_nunique'] = df.groupby('authorid')['feedid'].transform('nunique')
+df['weekday'] = df['date_'] % 7 + 1
 ## 内存够用的不需要做这一步
-df = reduce_mem(df, [f for f in df.columns if f not in ['date_'] + play_cols + y_list])
-df.to_csv("./data/lgb.csv", index=False)
+# df = reduce_mem(df, [f for f in df.columns if f not in ['date_'] + play_cols + y_list])
+df.to_csv("./data/lgb_concat_all.csv", index=False)
 assert False
 train = df[~df['read_comment'].isna()].reset_index(drop=True)
 test = df[df['read_comment'].isna()].reset_index(drop=True)

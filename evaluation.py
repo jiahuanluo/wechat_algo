@@ -65,4 +65,4 @@ def evaluate_deepctr(val_labels, val_pred_ans, userid_list, target, logging):
     weight_dict = {"read_comment": 4, "like": 3, "click_avatar": 2, "favorite": 1, "forward": 1,
                    "comment": 1, "follow": 1}
     weight_auc = compute_weighted_score(eval_dict, weight_dict)
-    logging.info("Weighted uAUC: ", weight_auc)
+    logging.info("Weighted uAUC: {}".format(weight_auc))

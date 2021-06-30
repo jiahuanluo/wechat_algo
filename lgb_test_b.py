@@ -12,7 +12,6 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 from lightgbm.sklearn import LGBMClassifier
-from catboost import CatBoostClassifier
 from collections import defaultdict
 import gc
 import time
@@ -86,10 +85,20 @@ max_day = 15
 ## 读取训练集
 train = pd.read_csv('data/wechat_algo_data1/user_action.csv')
 print(train.shape)
+action_cols = ["read_comment", "like", "click_avatar", "forward"]
+train["has_act"] = train[action_cols].max(axis=1)
+dim = ['userid', "date_"]
+user_df = train[dim + ["has_act"]].groupby(by=dim).mean().reset_index()
+valid_user_df = user_df.loc[(user_df["has_act"] > 0) & (user_df["has_act"] < 1)]
+train = train.merge(valid_user_df[dim], on=dim)
+del train['has_act']
+
 for y in y_list:
     print(y, train[y].mean())
 ## 读取测试集
-test = pd.read_csv('data/wechat_algo_data1/test_a.csv')
+# test_a = pd.read_csv('data/wechat_algo_data1/test_a.csv')
+test_b = pd.read_csv('data/wechat_algo_data1/test_b.csv')
+test = test_b
 test['date_'] = max_day
 print(test.shape)
 ## 合并处理
@@ -97,10 +106,14 @@ df = pd.concat([train, test], axis=0, ignore_index=True)
 print(df.head(3))
 ## 读取视频信息表
 feed_info = pd.read_csv('data/wechat_algo_data1/feed_info.csv')
+
 ## 此份baseline只保留这三列
-feed_info = feed_info[[
-    'feedid', 'authorid', 'videoplayseconds'
-]]
+feed_info = feed_info[['feedid', 'authorid', 'videoplayseconds', 'bgm_song_id', 'bgm_singer_id']]
+feed_info[["bgm_song_id", "bgm_singer_id"]] += 1  # 0 用于填未知
+feed_info[["bgm_song_id", "bgm_singer_id", "videoplayseconds"]] = \
+    feed_info[["bgm_song_id", "bgm_singer_id", "videoplayseconds"]].fillna(0)
+feed_info['bgm_song_id'] = feed_info['bgm_song_id'].astype('int64')
+feed_info['bgm_singer_id'] = feed_info['bgm_singer_id'].astype('int64')
 df = df.merge(feed_info, on='feedid', how='left')
 ## 视频时长是秒，转换成毫秒，才能与play、stay做运算
 df['videoplayseconds'] *= 1000
@@ -112,7 +125,7 @@ play_cols = [
 ]
 ## 统计历史5天的曝光、转化、视频观看等情况（此处的转化率统计其实就是target encoding）
 n_day = 5
-for stat_cols in tqdm([['userid'],['feedid'],['authorid'],['userid', 'authorid']]):
+for stat_cols in tqdm([['userid'], ['feedid'], ['authorid'], ['userid', 'authorid']]):
     f = '_'.join(stat_cols)
     stat_df = pd.DataFrame()
     for target_day in range(2, max_day + 1):
@@ -138,16 +151,21 @@ for stat_cols in tqdm([['userid'],['feedid'],['authorid'],['userid', 'authorid']
     del stat_df
     gc.collect()
 ## 全局信息统计，包括曝光、偏好等，略有穿越，但问题不大，可以上分，只要注意不要对userid-feedid做组合统计就行
-for f in tqdm(['userid', 'feedid', 'authorid']):
+for f in tqdm(['userid', 'feedid', 'authorid', 'bgm_song_id', 'bgm_singer_id']):
     df[f + '_count'] = df[f].map(df[f].value_counts())
 for f1, f2 in tqdm([
     ['userid', 'feedid'],
-    ['userid', 'authorid']
+    ['userid', 'authorid'],
+    ['userid', 'bgm_song_id'],
+    ['userid', 'bgm_singer_id'],
 ]):
     df['{}_in_{}_nunique'.format(f1, f2)] = df.groupby(f2)[f1].transform('nunique')
     df['{}_in_{}_nunique'.format(f2, f1)] = df.groupby(f1)[f2].transform('nunique')
 for f1, f2 in tqdm([
-    ['userid', 'authorid']
+    ['userid', 'authorid'],
+    ['userid', 'bgm_song_id'],
+    ['userid', 'bgm_singer_id'],
+
 ]):
     df['{}_{}_count'.format(f1, f2)] = df.groupby([f1, f2])['date_'].transform('count')
     df['{}_in_{}_count_prop'.format(f1, f2)] = df['{}_{}_count'.format(f1, f2)] / (df[f2 + '_count'] + 1)
@@ -155,8 +173,11 @@ for f1, f2 in tqdm([
 df['videoplayseconds_in_userid_mean'] = df.groupby('userid')['videoplayseconds'].transform('mean')
 df['videoplayseconds_in_authorid_mean'] = df.groupby('authorid')['videoplayseconds'].transform('mean')
 df['feedid_in_authorid_nunique'] = df.groupby('authorid')['feedid'].transform('nunique')
+df['weekday'] = df['date_'] % 7
 ## 内存够用的不需要做这一步
-df = reduce_mem(df, [f for f in df.columns if f not in ['date_'] + play_cols + y_list])
+# df = reduce_mem(df, [f for f in df.columns if f not in ['date_'] + play_cols + y_list])
+df.to_csv("./data/lgb_test_b.csv", index=False)
+assert False
 train = df[~df['read_comment'].isna()].reset_index(drop=True)
 test = df[df['read_comment'].isna()].reset_index(drop=True)
 cols = [f for f in df.columns if f not in ['date_'] + play_cols + y_list]
@@ -169,18 +190,15 @@ r_list = []
 for y in y_list[:4]:
     print('=========', y, '=========')
     t = time.time()
-    # clf = LGBMClassifier(
-    #     learning_rate=0.05,
-    #     n_estimators=5000,
-    #     num_leaves=63,
-    #     subsample=0.8,
-    #     colsample_bytree=0.8,
-    #     random_state=2021,
-    #     metric='None'
-    # )
-    clf = CatBoostClassifier(iterations=1000, cat_features=self.cate_features,
-                       eval_metric='AUC', loss_function='CrossEntropy', logging_level='Verbose',
-                       learning_rate=0.05, depth=6, l2_leaf_reg=5)
+    clf = LGBMClassifier(
+        learning_rate=0.05,
+        n_estimators=5000,
+        num_leaves=63,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=2021,
+        metric='None'
+    )
     clf.fit(
         trn_x[cols], trn_x[y],
         eval_set=[(val_x[cols], val_x[y])],
@@ -202,23 +220,19 @@ r_dict = dict(zip(y_list[:4], r_list))
 for y in y_list[:4]:
     print('=========', y, '=========')
     t = time.time()
-    # clf = LGBMClassifier(
-    #     learning_rate=0.05,
-    #     n_estimators=r_dict[y],
-    #     num_leaves=63,
-    #     subsample=0.8,
-    #     colsample_bytree=0.8,
-    #     random_state=2021
-    # )
-    clf = CatBoostClassifier(iterations=1000, cat_features=self.cate_features,
-                       eval_metric='AUC', loss_function='CrossEntropy', logging_level='Verbose',
-                       learning_rate=0.05, depth=6, l2_leaf_reg=5)
-
+    clf = LGBMClassifier(
+        learning_rate=0.05,
+        n_estimators=r_dict[y],
+        num_leaves=63,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=2021
+    )
     clf.fit(
         train[cols], train[y],
         eval_set=[(train[cols], train[y])],
         early_stopping_rounds=r_dict[y],
-        verbose=100,
+        verbose=100
     )
     test[y] = clf.predict_proba(test[cols])[:, 1]
     print('runtime: {}\n'.format(time.time() - t))
